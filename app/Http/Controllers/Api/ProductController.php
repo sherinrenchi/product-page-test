@@ -51,5 +51,68 @@ class ProductController extends Controller
             'discount' => $discountData,
             'images' => $images,
         ]);
+
     }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string',
+            'description' => 'required|string',
+            'slug' => 'required|string|unique:products',
+            'price' => 'required|integer',
+            'active' => 'required|boolean',
+        ]);
+
+        $product = Product::create($validated);
+
+        // Optionally handle images & discount here if provided
+
+        return response()->json($product, 201);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $product = \App\Models\Product::findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string',
+            'description' => 'sometimes|string',
+            'slug' => 'sometimes|string|unique:products,slug,' . $product->id,
+            'price' => 'sometimes|integer',
+            'active' => 'sometimes|boolean',
+            'images' => 'sometimes|array',
+            'images.*' => 'required_with:images|string',
+            'discount.type' => 'nullable|in:percent,amount',
+            'discount.amount' => 'nullable|integer'
+        ]);
+
+        $product->update($validated);
+
+        if (isset($validated['images'])) {
+            $product->images()->delete(); // remove old images
+            foreach ($validated['images'] as $path) {
+                $product->images()->create(['path' => $path]);
+            }
+        }
+
+        if (isset($validated['discount'])) {
+            $product->discount()->updateOrCreate([], [
+                'type' => $validated['discount']['type'],
+                'discount' => $validated['discount']['amount']
+            ]);
+        }
+
+        return response()->json(['message' => 'Product updated successfully']);
+    }
+    public function destroy($id)
+    {
+        $product = \App\Models\Product::findOrFail($id);
+        $product->images()->delete();
+        $product->discount()->delete();
+        $product->delete();
+
+        return response()->json(['message' => 'Product deleted successfully']);
+    }
+
 }
